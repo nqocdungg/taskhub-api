@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.v1.router import api_router
+from app.db.session import dispose_engine
 
 API_V1_PREFIX = "/api/v1"
 
@@ -12,8 +13,11 @@ API_V1_PREFIX = "/api/v1"
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """Startup/shutdown event của ứng dụng."""
     print("TaskHub API đang khởi động...")
-    yield
-    print("TaskHub API đã dừng.")
+    try:
+        yield
+    finally:
+        await dispose_engine()
+        print("TaskHub API đã dừng.")
 
 
 app = FastAPI(
