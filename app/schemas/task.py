@@ -1,21 +1,8 @@
 from datetime import datetime
-from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
-class TaskStatus(StrEnum):
-    TODO = "TODO"
-    IN_PROGRESS = "IN_PROGRESS"
-    IN_REVIEW = "IN_REVIEW"
-    DONE = "DONE"
-
-
-class TaskPriority(StrEnum):
-    LOW = "LOW"
-    MEDIUM = "MEDIUM"
-    HIGH = "HIGH"
-    URGENT = "URGENT"
+from app.models.enums import TaskPriority, TaskStatus
 
 
 class TaskBase(BaseModel):
@@ -29,10 +16,15 @@ class TaskBase(BaseModel):
 class TaskCreate(TaskBase):
     """Payload tao Task moi."""
 
+    project_id: int = Field(gt=0)
+    assignee_id: int | None = Field(default=None, gt=0)
+    created_by: int = Field(gt=0)
+
 
 class TaskUpdate(BaseModel):
     """Payload cập nhật Task (PATCH)."""
 
+    assignee_id: int | None = Field(default=None, gt=0)
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     status: TaskStatus | None = None
@@ -46,4 +38,7 @@ class TaskResponse(TaskBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    project_id: int
+    assignee_id: int | None
+    created_by: int
     created_at: datetime
