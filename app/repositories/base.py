@@ -1,14 +1,10 @@
-from typing import Generic, TypeVar
-
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import Base
 
-ModelT = TypeVar("ModelT", bound=Base)
 
-
-class BaseRepository(Generic[ModelT]):
+class BaseRepository[ModelT: Base]:
     def __init__(self, model: type[ModelT], session: AsyncSession) -> None:
         self._model = model
         self._session = session
@@ -25,7 +21,7 @@ class BaseRepository(Generic[ModelT]):
 
     async def list(self, *, page: int, limit: int) -> list[ModelT]:
         offset = (page - 1) * limit
-        primary_key = getattr(self._model, "id")
+        primary_key = inspect(self._model).primary_key[0]
         result = await self._session.scalars(
             select(self._model)
             .order_by(primary_key)
