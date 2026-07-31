@@ -30,6 +30,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True)
     full_name: Mapped[str] = mapped_column(String(255))
     hashed_password: Mapped[str] = mapped_column(String(255))
+    refresh_token_hash: Mapped[str | None] = mapped_column(String(64))
     role: Mapped[UserRole] = mapped_column(
         Enum(
             UserRole,

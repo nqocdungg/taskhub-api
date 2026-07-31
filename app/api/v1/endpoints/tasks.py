@@ -2,11 +2,15 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.v1.deps import get_task_service
+from app.api.v1.deps import get_current_user, get_task_service
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate
 from app.services.task import TaskService
 
-router = APIRouter(prefix="/tasks", tags=["Tasks"])
+router = APIRouter(
+    prefix="/tasks",
+    tags=["Tasks"],
+    dependencies=[Depends(get_current_user)],
+)
 
 TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 
