@@ -16,9 +16,7 @@ class TaskBase(BaseModel):
 class TaskCreate(TaskBase):
     """Payload tao Task moi."""
 
-    project_id: int = Field(gt=0)
     assignee_id: int | None = Field(default=None, gt=0)
-    created_by: int = Field(gt=0)
 
 
 class TaskUpdate(BaseModel):
