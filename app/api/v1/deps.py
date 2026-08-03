@@ -7,11 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import decode_token
 from app.db.session import get_db_session
 from app.models.entities import User
+from app.repositories.comment import CommentRepository
+from app.repositories.label import LabelRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.task import TaskRepository
 from app.repositories.user import UserRepository
 from app.repositories.workspace import WorkspaceRepository
 from app.services.auth import AuthService
+from app.services.comment import CommentService
+from app.services.label import LabelService
 from app.services.project import ProjectService
 from app.services.task import TaskService
 from app.services.user import UserService
@@ -77,5 +81,23 @@ def get_workspace_service(session: DbSessionDep) -> WorkspaceService:
 def get_project_service(session: DbSessionDep) -> ProjectService:
     return ProjectService(
         repository=ProjectRepository(session),
+        workspace_repository=WorkspaceRepository(session),
+    )
+
+
+def get_label_service(session: DbSessionDep) -> LabelService:
+    return LabelService(
+        repository=LabelRepository(session),
+        project_repository=ProjectRepository(session),
+        task_repository=TaskRepository(session),
+        workspace_repository=WorkspaceRepository(session),
+    )
+
+
+def get_comment_service(session: DbSessionDep) -> CommentService:
+    return CommentService(
+        repository=CommentRepository(session),
+        task_repository=TaskRepository(session),
+        project_repository=ProjectRepository(session),
         workspace_repository=WorkspaceRepository(session),
     )
