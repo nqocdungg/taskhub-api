@@ -1,5 +1,6 @@
-from fastapi import HTTPException, status
+from fastapi import status
 
+from app.core.exceptions import AppError
 from app.models.entities import Comment, Project, Task, User
 from app.repositories.comment import CommentRepository
 from app.repositories.project import ProjectRepository
@@ -45,36 +46,36 @@ class CommentService:
         project = await self._get_project_or_404(task.project_id)
         await self._require_member(project, current_user.id)
         if comment.author_id != current_user.id:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Bạn chỉ được xóa comment của chính mình.",
+                message="Bạn chỉ được xóa comment của chính mình.",
             )
         await self._repository.delete(comment)
 
     async def _get_comment_or_404(self, comment_id: int) -> Comment:
         comment = await self._repository.get(comment_id)
         if comment is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Comment {comment_id} không tồn tại.",
+                message=f"Comment {comment_id} không tồn tại.",
             )
         return comment
 
     async def _get_task_or_404(self, task_id: int) -> Task:
         task = await self._task_repository.get(task_id)
         if task is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Task {task_id} không tồn tại.",
+                message=f"Task {task_id} không tồn tại.",
             )
         return task
 
     async def _get_project_or_404(self, project_id: int) -> Project:
         project = await self._project_repository.get(project_id)
         if project is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Project {project_id} không tồn tại.",
+                message=f"Project {project_id} không tồn tại.",
             )
         return project
 
@@ -84,7 +85,7 @@ class CommentService:
             user_id,
         )
         if membership is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Bạn không phải thành viên của workspace chứa task.",
+                message="Bạn không phải thành viên của workspace chứa task.",
             )

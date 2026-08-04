@@ -1,6 +1,7 @@
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy.exc import IntegrityError
 
+from app.core.exceptions import AppError
 from app.models.entities import Label, Project, Task, User, WorkspaceMember
 from app.models.enums import WorkspaceMemberRole
 from app.repositories.label import LabelRepository
@@ -75,9 +76,9 @@ class LabelService:
         required_fields = {"name", "color"}
         updated_required_fields = required_fields & changes.keys()
         if any(changes[field] is None for field in updated_required_fields):
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Label name và color không được để trống.",
+                message="Label name và color không được để trống.",
             )
         updated_label = await self._repository.update(label, changes)
         return LabelResponse.model_validate(updated_label)
@@ -104,16 +105,16 @@ class LabelService:
 
         existing_link = await self._repository.get_task_label(task_id, label_id)
         if existing_link is not None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Label đã được gắn vào task.",
+                message="Label đã được gắn vào task.",
             )
         try:
             task_label = await self._repository.attach_to_task(task_id, label_id)
         except IntegrityError as error:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Không thể gắn label vào task.",
+                message="Không thể gắn label vào task.",
             ) from error
         return TaskLabelResponse.model_validate(task_label)
 
@@ -132,36 +133,36 @@ class LabelService:
 
         task_label = await self._repository.get_task_label(task_id, label_id)
         if task_label is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Label chưa được gắn vào task.",
+                message="Label chưa được gắn vào task.",
             )
         await self._repository.remove_from_task(task_label)
 
     async def _get_label_or_404(self, label_id: int) -> Label:
         label = await self._repository.get(label_id)
         if label is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Label {label_id} không tồn tại.",
+                message=f"Label {label_id} không tồn tại.",
             )
         return label
 
     async def _get_task_or_404(self, task_id: int) -> Task:
         task = await self._task_repository.get(task_id)
         if task is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Task {task_id} không tồn tại.",
+                message=f"Task {task_id} không tồn tại.",
             )
         return task
 
     async def _get_project_or_404(self, project_id: int) -> Project:
         project = await self._project_repository.get(project_id)
         if project is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Project {project_id} không tồn tại.",
+                message=f"Project {project_id} không tồn tại.",
             )
         return project
 
@@ -175,24 +176,24 @@ class LabelService:
             user_id,
         )
         if membership is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Bạn không phải thành viên của workspace chứa project.",
+                message="Bạn không phải thành viên của workspace chứa project.",
             )
         return membership
 
     @staticmethod
     def _require_editor(membership: WorkspaceMember) -> None:
         if membership.role not in EDIT_ROLES:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Role VIEWER chỉ được xem label.",
+                message="Role VIEWER chỉ được xem label.",
             )
 
     @staticmethod
     def _require_same_project(task: Task, label: Label) -> None:
         if task.project_id != label.project_id:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Task và label phải thuộc cùng một project.",
+                message="Task và label phải thuộc cùng một project.",
             )

@@ -1,9 +1,10 @@
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import AppError
 from app.core.security import decode_token
 from app.db.session import get_db_session
 from app.models.entities import User
@@ -33,9 +34,9 @@ async def get_current_user(
     credentials: BearerCredentialsDep,
     session: DbSessionDep,
 ) -> User:
-    credentials_error = HTTPException(
+    credentials_error = AppError(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Access token không hợp lệ hoặc đã hết hạn.",
+        message="Access token không hợp lệ hoặc đã hết hạn.",
         headers={"WWW-Authenticate": "Bearer"},
     )
     if credentials is None:

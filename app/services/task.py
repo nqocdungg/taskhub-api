@@ -1,6 +1,7 @@
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy.exc import IntegrityError
 
+from app.core.exceptions import AppError
 from app.models.entities import Project, Task, User, WorkspaceMember
 from app.models.enums import WorkspaceMemberRole
 from app.repositories.project import ProjectRepository
@@ -38,9 +39,9 @@ class TaskService:
         try:
             task = await self._repository.create(task_data)
         except IntegrityError as error:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Không thể tạo task với dữ liệu đã cung cấp.",
+                message="Không thể tạo task với dữ liệu đã cung cấp.",
             ) from error
         return TaskResponse.model_validate(task)
 
@@ -82,9 +83,9 @@ class TaskService:
         required_fields = {"title", "status", "priority"}
         updated_required_fields = required_fields & changes.keys()
         if any(changes[field] is None for field in updated_required_fields):
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="title, status và priority không được để trống.",
+                message="title, status và priority không được để trống.",
             )
         if "assignee_id" in changes:
             await self._validate_assignee(project, changes["assignee_id"])
@@ -92,9 +93,9 @@ class TaskService:
         try:
             updated_task = await self._repository.update(task, changes)
         except IntegrityError as error:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Không thể cập nhật task với dữ liệu đã cung cấp.",
+                message="Không thể cập nhật task với dữ liệu đã cung cấp.",
             ) from error
         return TaskResponse.model_validate(updated_task)
 
@@ -108,18 +109,18 @@ class TaskService:
     async def _get_task_or_404(self, task_id: int) -> Task:
         task = await self._repository.get(task_id)
         if task is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Task {task_id} không tồn tại.",
+                message=f"Task {task_id} không tồn tại.",
             )
         return task
 
     async def _get_project_or_404(self, project_id: int) -> Project:
         project = await self._project_repository.get(project_id)
         if project is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Project {project_id} không tồn tại.",
+                message=f"Project {project_id} không tồn tại.",
             )
         return project
 
@@ -133,18 +134,18 @@ class TaskService:
             user_id,
         )
         if membership is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Bạn không phải thành viên của workspace chứa task.",
+                message="Bạn không phải thành viên của workspace chứa task.",
             )
         return membership
 
     @staticmethod
     def _require_editor(membership: WorkspaceMember) -> None:
         if membership.role not in EDIT_ROLES:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Role VIEWER chỉ được xem task.",
+                message="Role VIEWER chỉ được xem task.",
             )
 
     async def _validate_assignee(
@@ -155,16 +156,16 @@ class TaskService:
         if assignee_id is None:
             return
         if not isinstance(assignee_id, int):
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="assignee_id không hợp lệ.",
+                message="assignee_id không hợp lệ.",
             )
         membership = await self._workspace_repository.get_membership(
             project.workspace_id,
             assignee_id,
         )
         if membership is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Assignee phải là thành viên của workspace.",
+                message="Assignee phải là thành viên của workspace.",
             )

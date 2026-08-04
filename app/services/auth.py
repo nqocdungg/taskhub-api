@@ -1,8 +1,9 @@
 import hmac
 
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy.exc import IntegrityError
 
+from app.core.exceptions import AppError
 from app.core.security import (
     create_token,
     decode_token,
@@ -28,9 +29,9 @@ class AuthService:
     async def register(self, payload: UserRegister) -> UserResponse:
         email = str(payload.email)
         if await self._repository.get_by_email(email) is not None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Email đã được sử dụng.",
+                message="Email đã được sử dụng.",
             )
 
         try:
@@ -44,9 +45,9 @@ class AuthService:
                 }
             )
         except IntegrityError as error:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Email đã được sử dụng.",
+                message="Email đã được sử dụng.",
             ) from error
 
         return UserResponse.model_validate(user)
@@ -110,8 +111,8 @@ class AuthService:
             )
 
     @staticmethod
-    def _unauthorized(detail: str) -> HTTPException:
-        return HTTPException(
+    def _unauthorized(message: str) -> AppError:
+        return AppError(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=detail,
+            message=message,
         )

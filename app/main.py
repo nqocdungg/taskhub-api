@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.v1.router import api_router
+from app.core.exceptions import register_exception_handlers
 from app.db.session import dispose_engine
 
 API_V1_PREFIX = "/api/v1"
@@ -26,4 +27,5 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+register_exception_handlers(app)
 app.include_router(api_router, prefix=API_V1_PREFIX)
