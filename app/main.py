@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.v1.router import api_router
+from app.core.cache import close_cache
 from app.core.exceptions import register_exception_handlers
 from app.db.session import dispose_engine
 
@@ -17,6 +18,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await close_cache()
         await dispose_engine()
         print("TaskHub API đã dừng.")
 

@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     )
 
     database_url: str = Field(min_length=1)
-    redis_url: str | None = None
+    redis_url: str = Field(min_length=1)
     jwt_secret_key: str = Field(min_length=1)
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = Field(default=30, gt=0)

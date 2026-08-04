@@ -1,9 +1,10 @@
 from fastapi import status
 from sqlalchemy.exc import IntegrityError
 
+from app.core.cache import TaskCache
 from app.core.exceptions import AppError
 from app.models.entities import Project, Task, User, WorkspaceMember
-from app.models.enums import WorkspaceMemberRole
+from app.models.enums import TaskPriority, TaskStatus, WorkspaceMemberRole
 from app.repositories.project import ProjectRepository
 from app.repositories.task import TaskRepository
 from app.repositories.workspace import WorkspaceRepository
@@ -18,10 +19,12 @@ class TaskService:
         repository: TaskRepository,
         project_repository: ProjectRepository,
         workspace_repository: WorkspaceRepository,
+        cache: TaskCache,
     ) -> None:
         self._repository = repository
         self._project_repository = project_repository
         self._workspace_repository = workspace_repository
+        self._cache = cache
 
     async def create(
         self,
@@ -43,6 +46,7 @@ class TaskService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 message="Không thể tạo task với dữ liệu đã cung cấp.",
             ) from error
+        await self._cache.invalidate_project(project_id)
         return TaskResponse.model_validate(task)
 
     async def list(
@@ -52,15 +56,42 @@ class TaskService:
         current_user: User,
         page: int,
         limit: int,
+        task_status: TaskStatus | None,
+        priority: TaskPriority | None,
+        assignee_id: int | None,
     ) -> list[TaskResponse]:
         project = await self._get_project_or_404(project_id)
         await self._require_member(project, current_user.id)
-        tasks = await self._repository.list_by_project(
+        cached_tasks = await self._cache.get(
             project_id=project_id,
+            task_status=task_status,
+            priority=priority,
+            assignee_id=assignee_id,
             page=page,
             limit=limit,
         )
-        return [TaskResponse.model_validate(task) for task in tasks]
+        if cached_tasks is not None:
+            return cached_tasks
+
+        tasks = await self._repository.list_by_project(
+            project_id=project_id,
+            task_status=task_status,
+            priority=priority,
+            assignee_id=assignee_id,
+            page=page,
+            limit=limit,
+        )
+        response = [TaskResponse.model_validate(task) for task in tasks]
+        await self._cache.set(
+            project_id=project_id,
+            task_status=task_status,
+            priority=priority,
+            assignee_id=assignee_id,
+            page=page,
+            limit=limit,
+            tasks=response,
+        )
+        return response
 
     async def get(self, task_id: int, current_user: User) -> TaskResponse:
         task = await self._get_task_or_404(task_id)
@@ -97,6 +128,7 @@ class TaskService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 message="Không thể cập nhật task với dữ liệu đã cung cấp.",
             ) from error
+        await self._cache.invalidate_project(task.project_id)
         return TaskResponse.model_validate(updated_task)
 
     async def delete(self, task_id: int, current_user: User) -> None:
@@ -105,6 +137,7 @@ class TaskService:
         membership = await self._require_member(project, current_user.id)
         self._require_editor(membership)
         await self._repository.delete(task)
+        await self._cache.invalidate_project(task.project_id)
 
     async def _get_task_or_404(self, task_id: int) -> Task:
         task = await self._repository.get(task_id)

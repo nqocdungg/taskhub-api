@@ -4,6 +4,7 @@ from fastapi import Depends, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import task_cache
 from app.core.exceptions import AppError
 from app.core.security import decode_token
 from app.db.session import get_db_session
@@ -61,6 +62,7 @@ def get_task_service(session: DbSessionDep) -> TaskService:
         repository=TaskRepository(session),
         project_repository=ProjectRepository(session),
         workspace_repository=WorkspaceRepository(session),
+        cache=task_cache,
     )
 
 
