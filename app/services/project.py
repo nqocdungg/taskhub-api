@@ -1,5 +1,7 @@
-from fastapi import HTTPException, status
+from fastapi import status
 
+from app.core.cache import TaskCache
+from app.core.exceptions import AppError
 from app.models.entities import Project, User, Workspace, WorkspaceMember
 from app.models.enums import ProjectStatus, WorkspaceMemberRole
 from app.repositories.project import ProjectRepository
@@ -14,9 +16,11 @@ class ProjectService:
         self,
         repository: ProjectRepository,
         workspace_repository: WorkspaceRepository,
+        cache: TaskCache,
     ) -> None:
         self._repository = repository
         self._workspace_repository = workspace_repository
+        self._cache = cache
 
     async def create(
         self,
@@ -65,9 +69,9 @@ class ProjectService:
 
         changes = payload.model_dump(exclude_unset=True)
         if changes.get("name") is None and "name" in changes:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Project name không được để trống.",
+                message="Project name không được để trống.",
             )
         updated_project = await self._repository.update(project, changes)
         return ProjectResponse.model_validate(updated_project)
@@ -93,22 +97,23 @@ class ProjectService:
         membership = await self._require_member(workspace, current_user.id)
         self._require_editor(membership)
         await self._repository.delete(project)
+        await self._cache.invalidate_project(project_id)
 
     async def _get_workspace_or_404(self, workspace_id: int) -> Workspace:
         workspace = await self._workspace_repository.get(workspace_id)
         if workspace is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Workspace {workspace_id} không tồn tại.",
+                message=f"Workspace {workspace_id} không tồn tại.",
             )
         return workspace
 
     async def _get_project_or_404(self, project_id: int) -> Project:
         project = await self._repository.get(project_id)
         if project is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Project {project_id} không tồn tại.",
+                message=f"Project {project_id} không tồn tại.",
             )
         return project
 
@@ -122,16 +127,16 @@ class ProjectService:
             user_id,
         )
         if membership is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Bạn không phải thành viên của workspace.",
+                message="Bạn không phải thành viên của workspace.",
             )
         return membership
 
     @staticmethod
     def _require_editor(membership: WorkspaceMember) -> None:
         if membership.role not in EDIT_ROLES:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Role VIEWER chỉ được xem project.",
+                message="Role VIEWER chỉ được xem project.",
             )

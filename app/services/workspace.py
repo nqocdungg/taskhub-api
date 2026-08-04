@@ -1,6 +1,7 @@
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy.exc import IntegrityError
 
+from app.core.exceptions import AppError
 from app.models.entities import User, Workspace
 from app.repositories.user import UserRepository
 from app.repositories.workspace import WorkspaceRepository
@@ -59,9 +60,9 @@ class WorkspaceService:
         self._require_owner(workspace, current_user.id)
         changes = payload.model_dump(exclude_unset=True)
         if changes.get("name") is None and "name" in changes:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Workspace name không được để trống.",
+                message="Workspace name không được để trống.",
             )
         updated_workspace = await self._repository.update(workspace, changes)
         return WorkspaceResponse.model_validate(updated_workspace)
@@ -82,18 +83,18 @@ class WorkspaceService:
 
         user = await self._user_repository.get(payload.user_id)
         if user is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User {payload.user_id} không tồn tại.",
+                message=f"User {payload.user_id} không tồn tại.",
             )
         existing_member = await self._repository.get_membership(
             workspace_id,
             payload.user_id,
         )
         if existing_member is not None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="User đã là thành viên của workspace.",
+                message="User đã là thành viên của workspace.",
             )
 
         try:
@@ -103,9 +104,9 @@ class WorkspaceService:
                 role=payload.role,
             )
         except IntegrityError as error:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Không thể thêm thành viên vào workspace.",
+                message="Không thể thêm thành viên vào workspace.",
             ) from error
         return WorkspaceMemberResponse.model_validate(member)
 
@@ -118,40 +119,40 @@ class WorkspaceService:
         workspace = await self._get_or_404(workspace_id)
         self._require_owner(workspace, current_user.id)
         if user_id == workspace.owner_id:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Không thể xóa owner khỏi workspace.",
+                message="Không thể xóa owner khỏi workspace.",
             )
 
         member = await self._repository.get_membership(workspace_id, user_id)
         if member is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Thành viên không tồn tại trong workspace.",
+                message="Thành viên không tồn tại trong workspace.",
             )
         await self._repository.remove_member(member)
 
     async def _get_or_404(self, workspace_id: int) -> Workspace:
         workspace = await self._repository.get(workspace_id)
         if workspace is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Workspace {workspace_id} không tồn tại.",
+                message=f"Workspace {workspace_id} không tồn tại.",
             )
         return workspace
 
     async def _require_member(self, workspace: Workspace, user_id: int) -> None:
         member = await self._repository.get_membership(workspace.id, user_id)
         if member is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Bạn không phải thành viên của workspace.",
+                message="Bạn không phải thành viên của workspace.",
             )
 
     @staticmethod
     def _require_owner(workspace: Workspace, user_id: int) -> None:
         if workspace.owner_id != user_id:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Chỉ owner mới có quyền thực hiện thao tác này.",
+                message="Chỉ owner mới có quyền thực hiện thao tác này.",
             )

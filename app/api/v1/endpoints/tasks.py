@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from app.api.v1.deps import CurrentUserDep, get_task_service
+from app.models.enums import TaskPriority, TaskStatus
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate
 from app.services.task import TaskService
 
@@ -35,12 +36,18 @@ async def list_tasks(
     service: TaskServiceDep,
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
+    task_status: Annotated[TaskStatus | None, Query(alias="status")] = None,
+    priority: TaskPriority | None = None,
+    assignee_id: Annotated[int | None, Query(gt=0)] = None,
 ) -> list[TaskResponse]:
     return await service.list(
         project_id=project_id,
         current_user=current_user,
         page=page,
         limit=limit,
+        task_status=task_status,
+        priority=priority,
+        assignee_id=assignee_id,
     )
 
 

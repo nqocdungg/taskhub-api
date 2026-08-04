@@ -1,6 +1,7 @@
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy.exc import IntegrityError
 
+from app.core.exceptions import AppError
 from app.core.security import hash_password, verify_password
 from app.models.entities import User
 from app.repositories.user import UserRepository
@@ -27,18 +28,18 @@ class UserService:
             normalized_email = str(email)
             existing_user = await self._repository.get_by_email(normalized_email)
             if existing_user is not None and existing_user.id != user.id:
-                raise HTTPException(
+                raise AppError(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail="Email đã được sử dụng.",
+                    message="Email đã được sử dụng.",
                 )
             changes["email"] = normalized_email
 
         try:
             updated_user = await self._repository.update(user, changes)
         except IntegrityError as error:
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Email đã được sử dụng.",
+                message="Email đã được sử dụng.",
             ) from error
         return UserResponse.model_validate(updated_user)
 
@@ -51,9 +52,9 @@ class UserService:
             payload.current_password,
             user.hashed_password,
         ):
-            raise HTTPException(
+            raise AppError(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Mật khẩu hiện tại không chính xác.",
+                message="Mật khẩu hiện tại không chính xác.",
             )
 
         await self._repository.update(
