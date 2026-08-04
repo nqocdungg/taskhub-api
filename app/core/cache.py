@@ -1,3 +1,5 @@
+import logging
+
 from pydantic import TypeAdapter, ValidationError
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
@@ -8,6 +10,7 @@ from app.schemas.task import TaskResponse
 
 TASK_CACHE_TTL_SECONDS = 60
 TASK_LIST_ADAPTER = TypeAdapter(list[TaskResponse])
+logger = logging.getLogger(__name__)
 
 
 class TaskCache:
@@ -35,6 +38,7 @@ class TaskCache:
         try:
             cached = await self._client.get(key)
         except RedisError:
+            logger.warning("task_cache_read_failed key=%s", key, exc_info=True)
             return None
 
         if cached is None:
@@ -43,6 +47,7 @@ class TaskCache:
         try:
             return TASK_LIST_ADAPTER.validate_json(cached)
         except ValidationError:
+            logger.warning("task_cache_invalid_payload key=%s", key)
             await self._delete(key)
             return None
 
@@ -72,6 +77,7 @@ class TaskCache:
                 ex=TASK_CACHE_TTL_SECONDS,
             )
         except RedisError:
+            logger.warning("task_cache_write_failed key=%s", key, exc_info=True)
             return
 
     async def invalidate_project(self, project_id: int) -> None:
@@ -81,12 +87,18 @@ class TaskCache:
             if keys:
                 await self._client.delete(*keys)
         except RedisError:
+            logger.warning(
+                "task_cache_invalidation_failed project_id=%s",
+                project_id,
+                exc_info=True,
+            )
             return
 
     async def _delete(self, key: str) -> None:
         try:
             await self._client.delete(key)
         except RedisError:
+            logger.warning("task_cache_delete_failed key=%s", key, exc_info=True)
             return
 
     @staticmethod

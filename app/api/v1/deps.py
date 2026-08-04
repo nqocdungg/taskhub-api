@@ -85,6 +85,7 @@ def get_project_service(session: DbSessionDep) -> ProjectService:
     return ProjectService(
         repository=ProjectRepository(session),
         workspace_repository=WorkspaceRepository(session),
+        cache=task_cache,
     )
 
 

@@ -1,5 +1,6 @@
 from fastapi import status
 
+from app.core.cache import TaskCache
 from app.core.exceptions import AppError
 from app.models.entities import Project, User, Workspace, WorkspaceMember
 from app.models.enums import ProjectStatus, WorkspaceMemberRole
@@ -15,9 +16,11 @@ class ProjectService:
         self,
         repository: ProjectRepository,
         workspace_repository: WorkspaceRepository,
+        cache: TaskCache,
     ) -> None:
         self._repository = repository
         self._workspace_repository = workspace_repository
+        self._cache = cache
 
     async def create(
         self,
@@ -94,6 +97,7 @@ class ProjectService:
         membership = await self._require_member(workspace, current_user.id)
         self._require_editor(membership)
         await self._repository.delete(project)
+        await self._cache.invalidate_project(project_id)
 
     async def _get_workspace_or_404(self, workspace_id: int) -> Workspace:
         workspace = await self._workspace_repository.get(workspace_id)

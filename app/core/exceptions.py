@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Mapping
 
 from fastapi import FastAPI, Request, status
@@ -15,6 +16,7 @@ ERROR_CODES = {
     status.HTTP_422_UNPROCESSABLE_ENTITY: "VALIDATION_ERROR",
     status.HTTP_500_INTERNAL_SERVER_ERROR: "INTERNAL_SERVER_ERROR",
 }
+logger = logging.getLogger(__name__)
 
 
 def _error_code(status_code: int) -> str:
@@ -51,9 +53,16 @@ class AppError(Exception):
         self.headers = headers
 
 
-async def _app_error_handler(_: Request, error: Exception) -> JSONResponse:
+async def _app_error_handler(request: Request, error: Exception) -> JSONResponse:
     if not isinstance(error, AppError):
         raise TypeError("AppError handler received an invalid exception.")
+    logger.warning(
+        "application_error method=%s path=%s status_code=%s code=%s",
+        request.method,
+        request.url.path,
+        error.status_code,
+        error.code,
+    )
     return _error_response(
         status_code=error.status_code,
         code=error.code,
@@ -63,11 +72,17 @@ async def _app_error_handler(_: Request, error: Exception) -> JSONResponse:
 
 
 async def _validation_error_handler(
-    _: Request,
+    request: Request,
     error: Exception,
 ) -> JSONResponse:
     if not isinstance(error, RequestValidationError):
         raise TypeError("Validation handler received an invalid exception.")
+    logger.warning(
+        "validation_error method=%s path=%s errors=%s",
+        request.method,
+        request.url.path,
+        len(error.errors()),
+    )
     return _error_response(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         code="VALIDATION_ERROR",
@@ -76,7 +91,7 @@ async def _validation_error_handler(
 
 
 async def _http_error_handler(
-    _: Request,
+    request: Request,
     error: Exception,
 ) -> JSONResponse:
     if not isinstance(error, StarletteHTTPException):
@@ -86,6 +101,12 @@ async def _http_error_handler(
         if isinstance(error.detail, str)
         else "Yêu cầu không thể được xử lý."
     )
+    logger.warning(
+        "http_error method=%s path=%s status_code=%s",
+        request.method,
+        request.url.path,
+        error.status_code,
+    )
     return _error_response(
         status_code=error.status_code,
         code=_error_code(error.status_code),
@@ -94,7 +115,16 @@ async def _http_error_handler(
     )
 
 
-async def _unexpected_error_handler(_: Request, __: Exception) -> JSONResponse:
+async def _unexpected_error_handler(
+    request: Request,
+    error: Exception,
+) -> JSONResponse:
+    logger.exception(
+        "unexpected_error method=%s path=%s",
+        request.method,
+        request.url.path,
+        exc_info=error,
+    )
     return _error_response(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         code="INTERNAL_SERVER_ERROR",
