@@ -63,3 +63,21 @@ xóa khỏi danh sách member nếu chưa có luồng chuyển quyền sở hữ
 
 Các endpoint được bảo vệ sử dụng Bearer access token. Toàn bộ response lỗi được
 mô tả theo định dạng `{"error": {"code": "...", "message": "..."}}`.
+
+## Automated tests
+
+Cài dependency dành cho development:
+
+```powershell
+.\venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+```
+
+Chạy toàn bộ test suite bằng PostgreSQL và Redis test tách biệt:
+
+```powershell
+.\scripts\test.ps1
+```
+
+Script kiểm tra migration hai chiều, chạy pytest, Ruff và mypy, sau đó tự dừng
+và xóa volume của test stack. Test suite có guard chỉ cho phép database có tên
+kết thúc bằng `_test`, không sử dụng database development.
