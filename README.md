@@ -31,3 +31,13 @@ Khi dùng Docker Compose, có thể chọn file biến môi trường bằng tù
 ```powershell
 docker compose --env-file .env.development up -d --build
 ```
+
+## Email thông báo khi giao Task
+
+Feature gửi email chạy bằng `BackgroundTasks`, vì vậy request tạo/cập nhật Task
+không phải chờ SMTP. Email được lên lịch khi Task có assignee lúc tạo mới hoặc
+khi `assignee_id` được đổi sang một thành viên khác.
+
+Mặc định `SMTP_ENABLED=false`. Để gửi email thật, cập nhật các biến `SMTP_*`
+trong file môi trường đang sử dụng và đặt `SMTP_ENABLED=true`. Có thể bỏ trống
+`SMTP_USERNAME` và `SMTP_PASSWORD` nếu SMTP server không yêu cầu đăng nhập.

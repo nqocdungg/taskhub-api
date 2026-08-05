@@ -18,6 +18,7 @@ from app.repositories.workspace import WorkspaceRepository
 from app.services.auth import AuthService
 from app.services.comment import CommentService
 from app.services.label import LabelService
+from app.services.notification import EmailNotificationService
 from app.services.project import ProjectService
 from app.services.task import TaskService
 from app.services.user import UserService
@@ -62,7 +63,9 @@ def get_task_service(session: DbSessionDep) -> TaskService:
         repository=TaskRepository(session),
         project_repository=ProjectRepository(session),
         workspace_repository=WorkspaceRepository(session),
+        user_repository=UserRepository(session),
         cache=task_cache,
+        notification_service=EmailNotificationService(),
     )
 
 

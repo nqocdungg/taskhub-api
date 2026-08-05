@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 
 from app.api.v1.deps import CurrentUserDep, get_task_service
 from app.models.enums import TaskPriority, TaskStatus
@@ -20,10 +20,16 @@ TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 async def create_task(
     project_id: int,
     payload: TaskCreate,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUserDep,
     service: TaskServiceDep,
 ) -> TaskResponse:
-    return await service.create(project_id, payload, current_user)
+    return await service.create(
+        project_id,
+        payload,
+        current_user,
+        background_tasks,
+    )
 
 
 @router.get(
@@ -64,10 +70,16 @@ async def get_task(
 async def update_task(
     task_id: int,
     payload: TaskUpdate,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUserDep,
     service: TaskServiceDep,
 ) -> TaskResponse:
-    return await service.update(task_id, payload, current_user)
+    return await service.update(
+        task_id,
+        payload,
+        current_user,
+        background_tasks,
+    )
 
 
 @router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
