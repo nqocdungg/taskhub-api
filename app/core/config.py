@@ -1,16 +1,22 @@
+import os
 from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+ENV_FILE = os.getenv("ENV_FILE", ".env").strip() or ".env"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
+    app_env: Literal["local", "development", "test", "staging", "production"] = (
+        "local"
+    )
     database_url: str = Field(min_length=1)
     redis_url: str = Field(min_length=1)
     jwt_secret_key: str = Field(min_length=1)

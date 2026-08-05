@@ -16,6 +16,7 @@ services:
     volumes:
       - ./app:/app/app:ro
     environment:
+      APP_ENV: ${APP_ENV:-local}
       DATABASE_URL: postgresql+asyncpg://taskhub:taskhub@db:5432/taskhub
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
