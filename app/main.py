@@ -14,6 +14,16 @@ API_V1_PREFIX = "/api/v1"
 configure_logging()
 logger = logging.getLogger(__name__)
 
+OPENAPI_TAGS = [
+    {"name": "Authentication", "description": "Đăng ký, đăng nhập và quản lý token."},
+    {"name": "Users", "description": "Quản lý thông tin người dùng hiện tại."},
+    {"name": "Workspaces", "description": "Quản lý workspace và thành viên."},
+    {"name": "Projects", "description": "Quản lý project trong workspace."},
+    {"name": "Tasks", "description": "Quản lý, lọc và phân trang task."},
+    {"name": "Labels", "description": "Quản lý label và gắn label cho task."},
+    {"name": "Comments", "description": "Thêm và xóa comment trên task."},
+]
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -32,6 +42,9 @@ app = FastAPI(
     description="TaskHub - Hệ thống quản lý công việc (Task Management API)",
     version="1.0.0",
     lifespan=lifespan,
+    openapi_tags=OPENAPI_TAGS,
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 register_exception_handlers(app)
 register_request_logging(app)

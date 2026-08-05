@@ -27,10 +27,10 @@ class WorkspaceRepository(BaseRepository[Workspace]):
                     role=WorkspaceMemberRole.OWNER,
                 )
             )
-            await self._session.commit()
         except Exception:
             await self._session.rollback()
             raise
+        await self._commit()
         await self._session.refresh(workspace)
         return workspace
 
@@ -53,6 +53,12 @@ class WorkspaceRepository(BaseRepository[Workspace]):
             .join(WorkspaceMember)
             .where(WorkspaceMember.user_id == user_id)
             .order_by(Workspace.id)
+        )
+        return list(result.all())
+
+    async def list_all(self) -> list[Workspace]:
+        result = await self._session.scalars(
+            select(Workspace).order_by(Workspace.id)
         )
         return list(result.all())
 

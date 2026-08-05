@@ -1,7 +1,8 @@
 from fastapi import status
 
 from app.core.exceptions import AppError
-from app.models.entities import Comment, Project, Task, User
+from app.core.rbac import EDIT_ROLES, is_admin
+from app.models.entities import Comment, Project, Task, User, WorkspaceMember
 from app.repositories.comment import CommentRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.task import TaskRepository
@@ -30,7 +31,8 @@ class CommentService:
     ) -> CommentResponse:
         task = await self._get_task_or_404(task_id)
         project = await self._get_project_or_404(task.project_id)
-        await self._require_member(project, current_user.id)
+        membership = await self._require_member(project, current_user)
+        self._require_editor(membership, current_user)
         comment = await self._repository.create(
             {
                 "task_id": task_id,
@@ -44,8 +46,9 @@ class CommentService:
         comment = await self._get_comment_or_404(comment_id)
         task = await self._get_task_or_404(comment.task_id)
         project = await self._get_project_or_404(task.project_id)
-        await self._require_member(project, current_user.id)
-        if comment.author_id != current_user.id:
+        membership = await self._require_member(project, current_user)
+        self._require_editor(membership, current_user)
+        if not is_admin(current_user) and comment.author_id != current_user.id:
             raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
                 message="Bạn chỉ được xóa comment của chính mình.",
@@ -79,13 +82,33 @@ class CommentService:
             )
         return project
 
-    async def _require_member(self, project: Project, user_id: int) -> None:
+    @staticmethod
+    def _require_editor(
+        membership: WorkspaceMember | None,
+        user: User,
+    ) -> None:
+        if is_admin(user):
+            return
+        if membership is None or membership.role not in EDIT_ROLES:
+            raise AppError(
+                status_code=status.HTTP_403_FORBIDDEN,
+                message="Role VIEWER chỉ được xem comment.",
+            )
+
+    async def _require_member(
+        self,
+        project: Project,
+        user: User,
+    ) -> WorkspaceMember | None:
+        if is_admin(user):
+            return None
         membership = await self._workspace_repository.get_membership(
             project.workspace_id,
-            user_id,
+            user.id,
         )
         if membership is None:
             raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
                 message="Bạn không phải thành viên của workspace chứa task.",
             )
+        return membership
