@@ -25,7 +25,11 @@ from app.services.user import UserService
 from app.services.workspace import WorkspaceService
 
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
-bearer_scheme = HTTPBearer(auto_error=False)
+bearer_scheme = HTTPBearer(
+    auto_error=False,
+    scheme_name="BearerAuth",
+    description="Nhập JWT access token nhận được từ endpoint đăng nhập.",
+)
 BearerCredentialsDep = Annotated[
     HTTPAuthorizationCredentials | None,
     Depends(bearer_scheme),

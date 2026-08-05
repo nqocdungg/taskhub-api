@@ -2,13 +2,12 @@ from fastapi import status
 
 from app.core.cache import TaskCache
 from app.core.exceptions import AppError
+from app.core.rbac import EDIT_ROLES, is_admin
 from app.models.entities import Project, User, Workspace, WorkspaceMember
-from app.models.enums import ProjectStatus, WorkspaceMemberRole
+from app.models.enums import ProjectStatus
 from app.repositories.project import ProjectRepository
 from app.repositories.workspace import WorkspaceRepository
 from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
-
-EDIT_ROLES = {WorkspaceMemberRole.OWNER, WorkspaceMemberRole.EDITOR}
 
 
 class ProjectService:
@@ -29,8 +28,8 @@ class ProjectService:
         current_user: User,
     ) -> ProjectResponse:
         workspace = await self._get_workspace_or_404(workspace_id)
-        membership = await self._require_member(workspace, current_user.id)
-        self._require_editor(membership)
+        membership = await self._require_member(workspace, current_user)
+        self._require_editor(membership, current_user)
         project = await self._repository.create(
             {"workspace_id": workspace_id, **payload.model_dump()}
         )
@@ -42,7 +41,7 @@ class ProjectService:
         current_user: User,
     ) -> list[ProjectResponse]:
         workspace = await self._get_workspace_or_404(workspace_id)
-        await self._require_member(workspace, current_user.id)
+        await self._require_member(workspace, current_user)
         projects = await self._repository.list_by_workspace(workspace_id)
         return [ProjectResponse.model_validate(project) for project in projects]
 
@@ -53,7 +52,7 @@ class ProjectService:
     ) -> ProjectResponse:
         project = await self._get_project_or_404(project_id)
         workspace = await self._get_workspace_or_404(project.workspace_id)
-        await self._require_member(workspace, current_user.id)
+        await self._require_member(workspace, current_user)
         return ProjectResponse.model_validate(project)
 
     async def update(
@@ -64,8 +63,8 @@ class ProjectService:
     ) -> ProjectResponse:
         project = await self._get_project_or_404(project_id)
         workspace = await self._get_workspace_or_404(project.workspace_id)
-        membership = await self._require_member(workspace, current_user.id)
-        self._require_editor(membership)
+        membership = await self._require_member(workspace, current_user)
+        self._require_editor(membership, current_user)
 
         changes = payload.model_dump(exclude_unset=True)
         if changes.get("name") is None and "name" in changes:
@@ -83,8 +82,8 @@ class ProjectService:
     ) -> ProjectResponse:
         project = await self._get_project_or_404(project_id)
         workspace = await self._get_workspace_or_404(project.workspace_id)
-        membership = await self._require_member(workspace, current_user.id)
-        self._require_editor(membership)
+        membership = await self._require_member(workspace, current_user)
+        self._require_editor(membership, current_user)
         archived_project = await self._repository.update(
             project,
             {"status": ProjectStatus.ARCHIVED},
@@ -94,8 +93,8 @@ class ProjectService:
     async def delete(self, project_id: int, current_user: User) -> None:
         project = await self._get_project_or_404(project_id)
         workspace = await self._get_workspace_or_404(project.workspace_id)
-        membership = await self._require_member(workspace, current_user.id)
-        self._require_editor(membership)
+        membership = await self._require_member(workspace, current_user)
+        self._require_editor(membership, current_user)
         await self._repository.delete(project)
         await self._cache.invalidate_project(project_id)
 
@@ -120,11 +119,13 @@ class ProjectService:
     async def _require_member(
         self,
         workspace: Workspace,
-        user_id: int,
-    ) -> WorkspaceMember:
+        user: User,
+    ) -> WorkspaceMember | None:
+        if is_admin(user):
+            return None
         membership = await self._workspace_repository.get_membership(
             workspace.id,
-            user_id,
+            user.id,
         )
         if membership is None:
             raise AppError(
@@ -134,8 +135,13 @@ class ProjectService:
         return membership
 
     @staticmethod
-    def _require_editor(membership: WorkspaceMember) -> None:
-        if membership.role not in EDIT_ROLES:
+    def _require_editor(
+        membership: WorkspaceMember | None,
+        user: User,
+    ) -> None:
+        if is_admin(user):
+            return
+        if membership is None or membership.role not in EDIT_ROLES:
             raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
                 message="Role VIEWER chỉ được xem project.",

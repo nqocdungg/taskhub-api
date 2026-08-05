@@ -9,8 +9,9 @@ from app.api.v1.endpoints import (
     users,
     workspaces,
 )
+from app.api.v1.responses import ERROR_RESPONSES
 
-api_router = APIRouter()
+api_router = APIRouter(responses=ERROR_RESPONSES)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(workspaces.router)

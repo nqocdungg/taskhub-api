@@ -3,16 +3,15 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.cache import TaskCache
 from app.core.exceptions import AppError
+from app.core.rbac import EDIT_ROLES, is_admin
 from app.models.entities import Project, Task, User, WorkspaceMember
-from app.models.enums import TaskPriority, TaskStatus, WorkspaceMemberRole
+from app.models.enums import TaskPriority, TaskStatus
 from app.repositories.project import ProjectRepository
 from app.repositories.task import TaskRepository
 from app.repositories.user import UserRepository
 from app.repositories.workspace import WorkspaceRepository
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate
 from app.services.notification import EmailNotificationService
-
-EDIT_ROLES = {WorkspaceMemberRole.OWNER, WorkspaceMemberRole.EDITOR}
 
 
 class TaskService:
@@ -40,8 +39,8 @@ class TaskService:
         background_tasks: BackgroundTasks,
     ) -> TaskResponse:
         project = await self._get_project_or_404(project_id)
-        membership = await self._require_member(project, current_user.id)
-        self._require_editor(membership)
+        membership = await self._require_member(project, current_user)
+        self._require_editor(membership, current_user)
         await self._validate_assignee(project, payload.assignee_id)
 
         task_data = {"project_id": project_id, **payload.model_dump()}
@@ -69,7 +68,7 @@ class TaskService:
         assignee_id: int | None,
     ) -> list[TaskResponse]:
         project = await self._get_project_or_404(project_id)
-        await self._require_member(project, current_user.id)
+        await self._require_member(project, current_user)
         cached_tasks = await self._cache.get(
             project_id=project_id,
             task_status=task_status,
@@ -104,7 +103,7 @@ class TaskService:
     async def get(self, task_id: int, current_user: User) -> TaskResponse:
         task = await self._get_task_or_404(task_id)
         project = await self._get_project_or_404(task.project_id)
-        await self._require_member(project, current_user.id)
+        await self._require_member(project, current_user)
         return TaskResponse.model_validate(task)
 
     async def update(
@@ -116,8 +115,8 @@ class TaskService:
     ) -> TaskResponse:
         task = await self._get_task_or_404(task_id)
         project = await self._get_project_or_404(task.project_id)
-        membership = await self._require_member(project, current_user.id)
-        self._require_editor(membership)
+        membership = await self._require_member(project, current_user)
+        self._require_editor(membership, current_user)
 
         previous_assignee_id = task.assignee_id
         changes = payload.model_dump(exclude_unset=True)
@@ -149,8 +148,8 @@ class TaskService:
     async def delete(self, task_id: int, current_user: User) -> None:
         task = await self._get_task_or_404(task_id)
         project = await self._get_project_or_404(task.project_id)
-        membership = await self._require_member(project, current_user.id)
-        self._require_editor(membership)
+        membership = await self._require_member(project, current_user)
+        self._require_editor(membership, current_user)
         await self._repository.delete(task)
         await self._cache.invalidate_project(task.project_id)
 
@@ -175,11 +174,13 @@ class TaskService:
     async def _require_member(
         self,
         project: Project,
-        user_id: int,
-    ) -> WorkspaceMember:
+        user: User,
+    ) -> WorkspaceMember | None:
+        if is_admin(user):
+            return None
         membership = await self._workspace_repository.get_membership(
             project.workspace_id,
-            user_id,
+            user.id,
         )
         if membership is None:
             raise AppError(
@@ -189,8 +190,13 @@ class TaskService:
         return membership
 
     @staticmethod
-    def _require_editor(membership: WorkspaceMember) -> None:
-        if membership.role not in EDIT_ROLES:
+    def _require_editor(
+        membership: WorkspaceMember | None,
+        user: User,
+    ) -> None:
+        if is_admin(user):
+            return
+        if membership is None or membership.role not in EDIT_ROLES:
             raise AppError(
                 status_code=status.HTTP_403_FORBIDDEN,
                 message="Role VIEWER chỉ được xem task.",
