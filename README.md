@@ -32,6 +32,10 @@ Khi dùng Docker Compose, có thể chọn file biến môi trường bằng tù
 docker compose --env-file .env.development up -d --build
 ```
 
+Container `app` chờ PostgreSQL và Redis sẵn sàng, tự động chạy
+`alembic upgrade head`, sau đó mới khởi động Uvicorn. Vì vậy một database volume
+rỗng sẽ được tạo đầy đủ schema ngay trong lần chạy Compose đầu tiên.
+
 ## Email thông báo khi giao Task
 
 Feature gửi email chạy bằng `BackgroundTasks`, vì vậy request tạo/cập nhật Task
