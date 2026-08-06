@@ -3,14 +3,13 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.cache import TaskCache
 from app.core.exceptions import AppError
-from app.core.rbac import EDIT_ROLES, is_admin
-from app.models.entities import Project, Task, User, WorkspaceMember
+from app.models.entities import Project, Task, User
 from app.models.enums import TaskPriority, TaskStatus
 from app.repositories.project import ProjectRepository
 from app.repositories.task import TaskRepository
 from app.repositories.user import UserRepository
-from app.repositories.workspace import WorkspaceRepository
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate
+from app.services.access import AccessService
 from app.services.notification import EmailNotificationService
 
 
@@ -19,14 +18,14 @@ class TaskService:
         self,
         repository: TaskRepository,
         project_repository: ProjectRepository,
-        workspace_repository: WorkspaceRepository,
+        access_service: AccessService,
         user_repository: UserRepository,
         cache: TaskCache,
         notification_service: EmailNotificationService,
     ) -> None:
         self._repository = repository
         self._project_repository = project_repository
-        self._workspace_repository = workspace_repository
+        self._access_service = access_service
         self._user_repository = user_repository
         self._cache = cache
         self._notification_service = notification_service
@@ -39,8 +38,14 @@ class TaskService:
         background_tasks: BackgroundTasks,
     ) -> TaskResponse:
         project = await self._get_project_or_404(project_id)
-        membership = await self._require_member(project, current_user)
-        self._require_editor(membership, current_user)
+        membership = await self._access_service.require_member(
+            project.workspace_id,
+            current_user,
+            message="Bạn không phải thành viên của workspace chứa task.",
+        )
+        self._access_service.require_editor(
+            membership, current_user, resource_name="task"
+        )
         await self._validate_assignee(project, payload.assignee_id)
 
         task_data = {"project_id": project_id, **payload.model_dump()}
@@ -68,7 +73,11 @@ class TaskService:
         assignee_id: int | None,
     ) -> list[TaskResponse]:
         project = await self._get_project_or_404(project_id)
-        await self._require_member(project, current_user)
+        await self._access_service.require_member(
+            project.workspace_id,
+            current_user,
+            message="Bạn không phải thành viên của workspace chứa task.",
+        )
         cached_tasks = await self._cache.get(
             project_id=project_id,
             task_status=task_status,
@@ -103,7 +112,11 @@ class TaskService:
     async def get(self, task_id: int, current_user: User) -> TaskResponse:
         task = await self._get_task_or_404(task_id)
         project = await self._get_project_or_404(task.project_id)
-        await self._require_member(project, current_user)
+        await self._access_service.require_member(
+            project.workspace_id,
+            current_user,
+            message="Bạn không phải thành viên của workspace chứa task.",
+        )
         return TaskResponse.model_validate(task)
 
     async def update(
@@ -115,8 +128,14 @@ class TaskService:
     ) -> TaskResponse:
         task = await self._get_task_or_404(task_id)
         project = await self._get_project_or_404(task.project_id)
-        membership = await self._require_member(project, current_user)
-        self._require_editor(membership, current_user)
+        membership = await self._access_service.require_member(
+            project.workspace_id,
+            current_user,
+            message="Bạn không phải thành viên của workspace chứa task.",
+        )
+        self._access_service.require_editor(
+            membership, current_user, resource_name="task"
+        )
 
         previous_assignee_id = task.assignee_id
         changes = payload.model_dump(exclude_unset=True)
@@ -148,8 +167,14 @@ class TaskService:
     async def delete(self, task_id: int, current_user: User) -> None:
         task = await self._get_task_or_404(task_id)
         project = await self._get_project_or_404(task.project_id)
-        membership = await self._require_member(project, current_user)
-        self._require_editor(membership, current_user)
+        membership = await self._access_service.require_member(
+            project.workspace_id,
+            current_user,
+            message="Bạn không phải thành viên của workspace chứa task.",
+        )
+        self._access_service.require_editor(
+            membership, current_user, resource_name="task"
+        )
         await self._repository.delete(task)
         await self._cache.invalidate_project(task.project_id)
 
@@ -170,37 +195,6 @@ class TaskService:
                 message=f"Project {project_id} không tồn tại.",
             )
         return project
-
-    async def _require_member(
-        self,
-        project: Project,
-        user: User,
-    ) -> WorkspaceMember | None:
-        if is_admin(user):
-            return None
-        membership = await self._workspace_repository.get_membership(
-            project.workspace_id,
-            user.id,
-        )
-        if membership is None:
-            raise AppError(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Bạn không phải thành viên của workspace chứa task.",
-            )
-        return membership
-
-    @staticmethod
-    def _require_editor(
-        membership: WorkspaceMember | None,
-        user: User,
-    ) -> None:
-        if is_admin(user):
-            return
-        if membership is None or membership.role not in EDIT_ROLES:
-            raise AppError(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Role VIEWER chỉ được xem task.",
-            )
 
     async def _schedule_assignment_notification(
         self,
@@ -232,7 +226,7 @@ class TaskService:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 message="assignee_id không hợp lệ.",
             )
-        membership = await self._workspace_repository.get_membership(
+        membership = await self._access_service.get_membership(
             project.workspace_id,
             assignee_id,
         )

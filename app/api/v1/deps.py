@@ -15,6 +15,7 @@ from app.repositories.project import ProjectRepository
 from app.repositories.task import TaskRepository
 from app.repositories.user import UserRepository
 from app.repositories.workspace import WorkspaceRepository
+from app.services.access import AccessService
 from app.services.auth import AuthService
 from app.services.comment import CommentService
 from app.services.label import LabelService
@@ -63,10 +64,11 @@ CurrentUserDep = Annotated[User, Depends(get_current_user)]
 
 
 def get_task_service(session: DbSessionDep) -> TaskService:
+    workspace_repository = WorkspaceRepository(session)
     return TaskService(
         repository=TaskRepository(session),
         project_repository=ProjectRepository(session),
-        workspace_repository=WorkspaceRepository(session),
+        access_service=AccessService(workspace_repository),
         user_repository=UserRepository(session),
         cache=task_cache,
         notification_service=EmailNotificationService(),
@@ -82,33 +84,39 @@ def get_user_service(session: DbSessionDep) -> UserService:
 
 
 def get_workspace_service(session: DbSessionDep) -> WorkspaceService:
+    workspace_repository = WorkspaceRepository(session)
     return WorkspaceService(
-        repository=WorkspaceRepository(session),
+        repository=workspace_repository,
         user_repository=UserRepository(session),
+        access_service=AccessService(workspace_repository),
     )
 
 
 def get_project_service(session: DbSessionDep) -> ProjectService:
+    workspace_repository = WorkspaceRepository(session)
     return ProjectService(
         repository=ProjectRepository(session),
-        workspace_repository=WorkspaceRepository(session),
+        workspace_repository=workspace_repository,
+        access_service=AccessService(workspace_repository),
         cache=task_cache,
     )
 
 
 def get_label_service(session: DbSessionDep) -> LabelService:
+    workspace_repository = WorkspaceRepository(session)
     return LabelService(
         repository=LabelRepository(session),
         project_repository=ProjectRepository(session),
         task_repository=TaskRepository(session),
-        workspace_repository=WorkspaceRepository(session),
+        access_service=AccessService(workspace_repository),
     )
 
 
 def get_comment_service(session: DbSessionDep) -> CommentService:
+    workspace_repository = WorkspaceRepository(session)
     return CommentService(
         repository=CommentRepository(session),
         task_repository=TaskRepository(session),
         project_repository=ProjectRepository(session),
-        workspace_repository=WorkspaceRepository(session),
+        access_service=AccessService(workspace_repository),
     )
