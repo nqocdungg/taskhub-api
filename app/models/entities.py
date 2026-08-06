@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     String,
     Text,
     func,
@@ -100,6 +101,7 @@ class Workspace(Base):
 
 class WorkspaceMember(Base):
     __tablename__ = "workspace_members"
+    __table_args__ = (Index("ix_workspace_members_user_id", "user_id"),)
 
     workspace_id: Mapped[int] = mapped_column(
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -127,6 +129,9 @@ class WorkspaceMember(Base):
 
 class Project(Base):
     __tablename__ = "projects"
+    __table_args__ = (
+        Index("ix_projects_workspace_id_id", "workspace_id", "id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     workspace_id: Mapped[int] = mapped_column(
@@ -165,6 +170,22 @@ class Project(Base):
 
 class Task(Base):
     __tablename__ = "tasks"
+    __table_args__ = (
+        Index("ix_tasks_project_id_id", "project_id", "id"),
+        Index("ix_tasks_project_status_id", "project_id", "status", "id"),
+        Index(
+            "ix_tasks_project_priority_id",
+            "project_id",
+            "priority",
+            "id",
+        ),
+        Index(
+            "ix_tasks_project_assignee_id",
+            "project_id",
+            "assignee_id",
+            "id",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(
@@ -227,6 +248,7 @@ class Task(Base):
 
 class Label(Base):
     __tablename__ = "labels"
+    __table_args__ = (Index("ix_labels_project_id_id", "project_id", "id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(

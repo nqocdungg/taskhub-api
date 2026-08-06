@@ -2,18 +2,17 @@ from fastapi import status
 from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import AppError
-from app.core.rbac import EDIT_ROLES, is_admin
-from app.models.entities import Label, Project, Task, User, WorkspaceMember
+from app.models.entities import Label, Project, Task, User
 from app.repositories.label import LabelRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.task import TaskRepository
-from app.repositories.workspace import WorkspaceRepository
 from app.schemas.label import (
     LabelCreate,
     LabelResponse,
     LabelUpdate,
     TaskLabelResponse,
 )
+from app.services.access import AccessService
 
 
 class LabelService:
@@ -22,12 +21,12 @@ class LabelService:
         repository: LabelRepository,
         project_repository: ProjectRepository,
         task_repository: TaskRepository,
-        workspace_repository: WorkspaceRepository,
+        access_service: AccessService,
     ) -> None:
         self._repository = repository
         self._project_repository = project_repository
         self._task_repository = task_repository
-        self._workspace_repository = workspace_repository
+        self._access_service = access_service
 
     async def create(
         self,
@@ -36,8 +35,14 @@ class LabelService:
         current_user: User,
     ) -> LabelResponse:
         project = await self._get_project_or_404(project_id)
-        membership = await self._require_member(project, current_user)
-        self._require_editor(membership, current_user)
+        membership = await self._access_service.require_member(
+            project.workspace_id,
+            current_user,
+            message="Bạn không phải thành viên của workspace chứa project.",
+        )
+        self._access_service.require_editor(
+            membership, current_user, resource_name="label"
+        )
         label = await self._repository.create(
             {"project_id": project_id, **payload.model_dump()}
         )
@@ -49,14 +54,22 @@ class LabelService:
         current_user: User,
     ) -> list[LabelResponse]:
         project = await self._get_project_or_404(project_id)
-        await self._require_member(project, current_user)
+        await self._access_service.require_member(
+            project.workspace_id,
+            current_user,
+            message="Bạn không phải thành viên của workspace chứa project.",
+        )
         labels = await self._repository.list_by_project(project_id)
         return [LabelResponse.model_validate(label) for label in labels]
 
     async def get(self, label_id: int, current_user: User) -> LabelResponse:
         label = await self._get_label_or_404(label_id)
         project = await self._get_project_or_404(label.project_id)
-        await self._require_member(project, current_user)
+        await self._access_service.require_member(
+            project.workspace_id,
+            current_user,
+            message="Bạn không phải thành viên của workspace chứa project.",
+        )
         return LabelResponse.model_validate(label)
 
     async def update(
@@ -67,8 +80,14 @@ class LabelService:
     ) -> LabelResponse:
         label = await self._get_label_or_404(label_id)
         project = await self._get_project_or_404(label.project_id)
-        membership = await self._require_member(project, current_user)
-        self._require_editor(membership, current_user)
+        membership = await self._access_service.require_member(
+            project.workspace_id,
+            current_user,
+            message="Bạn không phải thành viên của workspace chứa project.",
+        )
+        self._access_service.require_editor(
+            membership, current_user, resource_name="label"
+        )
 
         changes = payload.model_dump(exclude_unset=True)
         required_fields = {"name", "color"}
@@ -84,8 +103,14 @@ class LabelService:
     async def delete(self, label_id: int, current_user: User) -> None:
         label = await self._get_label_or_404(label_id)
         project = await self._get_project_or_404(label.project_id)
-        membership = await self._require_member(project, current_user)
-        self._require_editor(membership, current_user)
+        membership = await self._access_service.require_member(
+            project.workspace_id,
+            current_user,
+            message="Bạn không phải thành viên của workspace chứa project.",
+        )
+        self._access_service.require_editor(
+            membership, current_user, resource_name="label"
+        )
         await self._repository.delete(label)
 
     async def attach_to_task(
@@ -96,8 +121,14 @@ class LabelService:
     ) -> TaskLabelResponse:
         task = await self._get_task_or_404(task_id)
         project = await self._get_project_or_404(task.project_id)
-        membership = await self._require_member(project, current_user)
-        self._require_editor(membership, current_user)
+        membership = await self._access_service.require_member(
+            project.workspace_id,
+            current_user,
+            message="Bạn không phải thành viên của workspace chứa project.",
+        )
+        self._access_service.require_editor(
+            membership, current_user, resource_name="label"
+        )
         label = await self._get_label_or_404(label_id)
         self._require_same_project(task, label)
 
@@ -124,8 +155,14 @@ class LabelService:
     ) -> None:
         task = await self._get_task_or_404(task_id)
         project = await self._get_project_or_404(task.project_id)
-        membership = await self._require_member(project, current_user)
-        self._require_editor(membership, current_user)
+        membership = await self._access_service.require_member(
+            project.workspace_id,
+            current_user,
+            message="Bạn không phải thành viên của workspace chứa project.",
+        )
+        self._access_service.require_editor(
+            membership, current_user, resource_name="label"
+        )
         label = await self._get_label_or_404(label_id)
         self._require_same_project(task, label)
 
@@ -163,37 +200,6 @@ class LabelService:
                 message=f"Project {project_id} không tồn tại.",
             )
         return project
-
-    async def _require_member(
-        self,
-        project: Project,
-        user: User,
-    ) -> WorkspaceMember | None:
-        if is_admin(user):
-            return None
-        membership = await self._workspace_repository.get_membership(
-            project.workspace_id,
-            user.id,
-        )
-        if membership is None:
-            raise AppError(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Bạn không phải thành viên của workspace chứa project.",
-            )
-        return membership
-
-    @staticmethod
-    def _require_editor(
-        membership: WorkspaceMember | None,
-        user: User,
-    ) -> None:
-        if is_admin(user):
-            return
-        if membership is None or membership.role not in EDIT_ROLES:
-            raise AppError(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Role VIEWER chỉ được xem label.",
-            )
 
     @staticmethod
     def _require_same_project(task: Task, label: Label) -> None:
